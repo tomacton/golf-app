@@ -14,7 +14,7 @@ The owner is a **non-coder**. Drive decisions, pick sensible defaults, narrate w
 
 ## Tech stack (locked in)
 
-- **SvelteKit 2 + Svelte 5** with `adapter-static`
+- **SvelteKit 2 + Svelte 5** with `@sveltejs/adapter-cloudflare` (the Workers + Static Assets deploy model). Pure SPA — `_worker.js` is essentially a static-file shim.
 - **TypeScript** everywhere
 - **`@vite-pwa/sveltekit`** for the PWA manifest + service worker
 - **Dexie 4** over IndexedDB (when local storage is added in Phase 1)

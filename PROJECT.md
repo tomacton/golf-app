@@ -47,4 +47,5 @@ The user is a **non-coder**: drive the work, pick sensible defaults, explain dec
 |------------|------------------------------------------------------------------------|
 | 2026-05-22 | Project kickoff. Research phase complete. MVP plan locked in.          |
 | 2026-05-22 | v1 scope: swing video analysis (record → auto-trim → pose overlay → 3 faults → save). See `docs/mvp-plan.md`. |
-| _next_     | Phase 0 — SvelteKit skeleton + Cloudflare Pages deploy (1 session).    |
+| 2026-05-22 | Phase 0 scaffold complete locally. Repo pushed to https://github.com/tomacton/golf-app. Cloudflare Pages connection pending user setup. |
+| _next_     | Phase 1 — Camera capture (record + playback).                          |
