@@ -55,8 +55,8 @@ npm run format       # prettier auto-format
 
 Track this manually here when you finish a phase. See `docs/mvp-plan.md` for what each phase entails.
 
-- [x] **Phase 0** — Skeleton: SvelteKit + PWA manifest + icons + Cloudflare Pages deploy
-- [ ] **Phase 1** — Camera capture
+- [x] **Phase 0** — Skeleton: SvelteKit + PWA manifest + icons + Cloudflare Workers Static Assets deploy. Live at https://golf-app.acton-t.workers.dev.
+- [ ] **Phase 1** — Camera capture (in progress)
 - [ ] **Phase 2** — Pose overlay
 - [ ] **Phase 3** — Auto-trim swing window
 - [ ] **Phase 4** — Fault detection (early extension, OTT, head movement)
