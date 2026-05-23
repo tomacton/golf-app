@@ -7,8 +7,9 @@
 		type FacingMode
 	} from '$lib/camera/capture';
 	import { loadPoseLandmarker, drawPose } from '$lib/pose/detector';
+	import { findSwingWindow, type PoseFrame, type SwingWindow } from '$lib/pose/swing';
 
-	type Phase = 'idle' | 'preview' | 'recording' | 'playback' | 'denied' | 'error';
+	type Phase = 'idle' | 'preview' | 'recording' | 'analyzing' | 'playback' | 'denied' | 'error';
 	type PoseState = 'idle' | 'loading' | 'ready' | 'failed';
 
 	const MAX_SECONDS = 30;
@@ -27,6 +28,9 @@
 	let timer: number | null = null;
 	let poseState: PoseState = $state('idle');
 	let poseError: string = $state('');
+	let analysisProgress: number = $state(0);
+	let analysisError: string = $state('');
+	let swingWindow = $state<SwingWindow | null>(null);
 
 	$effect(() => {
 		if (previewEl && stream && (phase === 'preview' || phase === 'recording')) {
@@ -90,6 +94,27 @@
 
 	let landmarkerRef: Awaited<ReturnType<typeof loadPoseLandmarker>> | null = null;
 
+	$effect(() => {
+		if (phase !== 'playback' || !playbackEl || !swingWindow) return;
+		const v = playbackEl;
+		const w = swingWindow;
+		const seekToStart = () => {
+			v.currentTime = w.start;
+		};
+		const guardEnd = () => {
+			if (v.currentTime >= w.end && !v.paused) {
+				v.pause();
+			}
+		};
+		if (v.readyState >= 1) seekToStart();
+		else v.addEventListener('loadedmetadata', seekToStart, { once: true });
+		v.addEventListener('timeupdate', guardEnd);
+		return () => {
+			v.removeEventListener('loadedmetadata', seekToStart);
+			v.removeEventListener('timeupdate', guardEnd);
+		};
+	});
+
 	async function startPreview() {
 		errorMsg = '';
 		try {
@@ -133,7 +158,90 @@
 		blobUrl = URL.createObjectURL(blob);
 		stopStream(stream);
 		stream = null;
+		phase = 'analyzing';
+		analysisProgress = 0;
+		analysisError = '';
+		swingWindow = null;
+		try {
+			swingWindow = await analyzeSwing(blob, (pct) => {
+				analysisProgress = pct;
+			});
+		} catch (err) {
+			analysisError = (err as Error).message || 'Swing analysis failed.';
+		}
 		phase = 'playback';
+	}
+
+	async function analyzeSwing(
+		clip: Blob,
+		onProgress: (pct: number) => void
+	): Promise<SwingWindow | null> {
+		const video = document.createElement('video');
+		const url = URL.createObjectURL(clip);
+		video.src = url;
+		video.muted = true;
+		video.playsInline = true;
+		video.preload = 'auto';
+		// iOS sometimes refuses to play a detached video. Park it offscreen so it
+		// is part of the document but invisible.
+		video.style.position = 'fixed';
+		video.style.left = '-9999px';
+		video.style.top = '0';
+		video.style.width = '1px';
+		video.style.height = '1px';
+		document.body.appendChild(video);
+
+		try {
+			await new Promise<void>((resolve, reject) => {
+				video.addEventListener('loadedmetadata', () => resolve(), { once: true });
+				video.addEventListener(
+					'error',
+					() => reject(new Error('Could not load video for analysis.')),
+					{ once: true }
+				);
+			});
+
+			const lm = await loadPoseLandmarker();
+			const frames: PoseFrame[] = [];
+			const duration = video.duration || 1;
+
+			await new Promise<void>((resolve, reject) => {
+				const onFrame: VideoFrameRequestCallback = (now, meta) => {
+					try {
+						const result = lm.detectForVideo(video, now);
+						if (result.landmarks[0]) {
+							frames.push({ t: meta.mediaTime, landmarks: result.landmarks[0] });
+						}
+						onProgress(Math.min(100, (meta.mediaTime / duration) * 100));
+						if (!video.ended) {
+							video.requestVideoFrameCallback(onFrame);
+						}
+					} catch (err) {
+						reject(err);
+					}
+				};
+				video.addEventListener('ended', () => resolve(), { once: true });
+				video.addEventListener(
+					'error',
+					() => reject(new Error('Video error during analysis.')),
+					{ once: true }
+				);
+				video.requestVideoFrameCallback(onFrame);
+				video.play().catch(reject);
+			});
+
+			onProgress(100);
+			return findSwingWindow(frames);
+		} finally {
+			document.body.removeChild(video);
+			URL.revokeObjectURL(url);
+		}
+	}
+
+	function playSwingOnly() {
+		if (!playbackEl || !swingWindow) return;
+		playbackEl.currentTime = swingWindow.start;
+		void playbackEl.play();
 	}
 
 	async function recordAnother() {
@@ -141,6 +249,8 @@
 		blobUrl = '';
 		blob = null;
 		elapsed = 0;
+		swingWindow = null;
+		analysisProgress = 0;
 		await startPreview();
 	}
 
@@ -158,6 +268,9 @@
 	});
 
 	const blobSizeMb = $derived(blob ? (blob.size / 1024 / 1024).toFixed(2) : '0.00');
+	const swingDuration = $derived(
+		swingWindow ? (swingWindow.end - swingWindow.start).toFixed(2) : '0.00'
+	);
 </script>
 
 <svelte:head>
@@ -192,6 +305,15 @@
 	{#if phase === 'recording' && elapsed > MAX_SECONDS - 5}
 		<p class="hint">Auto-stops at {MAX_SECONDS}s</p>
 	{/if}
+{:else if phase === 'analyzing'}
+	<div class="panel analyzing">
+		<div class="spinner" aria-hidden="true"></div>
+		<h2>Analyzing swing…</h2>
+		<div class="progress-bar">
+			<div class="progress-fill" style:width="{analysisProgress}%"></div>
+		</div>
+		<p class="hint">Finding the swing window in your clip.</p>
+	</div>
 {:else if phase === 'playback'}
 	<div class="video-wrap playback">
 		<!-- svelte-ignore a11y_media_has_caption -->
@@ -205,6 +327,27 @@
 			<div class="pose-badge ok">Pose ready</div>
 		{/if}
 	</div>
+	{#if swingWindow}
+		<div class="swing-info">
+			<div class="swing-row">
+				<span class="swing-label">Swing detected</span>
+				<span class="swing-conf" data-conf={swingWindow.confidence}>{swingWindow.confidence}</span>
+			</div>
+			<div class="swing-times">
+				{swingWindow.start.toFixed(2)}s → {swingWindow.end.toFixed(2)}s
+				<span class="muted">({swingDuration}s)</span>
+			</div>
+		</div>
+	{:else if analysisError}
+		<div class="panel error subtle">
+			<strong>Swing analysis failed:</strong> {analysisError}
+		</div>
+	{:else}
+		<div class="panel subtle">
+			<strong>No clear swing detected.</strong> Try recording with the phone more stable and more
+			pre-swing stillness so the algorithm can find the "address" position.
+		</div>
+	{/if}
 	<dl class="info">
 		<dt>Duration</dt>
 		<dd>{elapsed.toFixed(1)}s</dd>
@@ -214,6 +357,9 @@
 		<dd>{blob?.type || 'unknown'}</dd>
 	</dl>
 	<div class="controls">
+		{#if swingWindow}
+			<button class="btn secondary" onclick={playSwingOnly}>▶ Play swing</button>
+		{/if}
 		<button class="btn primary" onclick={recordAnother}>Record another</button>
 	</div>
 	<p class="hint">Play or scrub to see the skeleton track your motion.</p>
@@ -398,5 +544,99 @@
 		margin: 0;
 		font-variant-numeric: tabular-nums;
 		word-break: break-all;
+	}
+
+	.analyzing {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		gap: 14px;
+	}
+	.analyzing h2 {
+		margin: 0;
+		font-size: 1.2rem;
+		font-weight: 600;
+	}
+	.spinner {
+		width: 44px;
+		height: 44px;
+		border-radius: 50%;
+		border: 3px solid rgba(255, 255, 255, 0.18);
+		border-top-color: #fff;
+		animation: spin 0.9s linear infinite;
+	}
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+	.progress-bar {
+		width: 100%;
+		height: 6px;
+		background: rgba(255, 255, 255, 0.12);
+		border-radius: 999px;
+		overflow: hidden;
+	}
+	.progress-fill {
+		height: 100%;
+		background: #fff;
+		border-radius: 999px;
+		transition: width 80ms linear;
+	}
+
+	.swing-info {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 12px 14px;
+		background: rgba(0, 200, 120, 0.16);
+		border: 1px solid rgba(0, 200, 120, 0.4);
+		border-radius: 10px;
+		margin-bottom: 14px;
+	}
+	.swing-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+	}
+	.swing-label {
+		font-size: 0.8rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		opacity: 0.85;
+	}
+	.swing-conf {
+		font-size: 0.75rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		padding: 3px 8px;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.18);
+	}
+	.swing-conf[data-conf='high'] {
+		background: rgba(0, 230, 118, 0.35);
+	}
+	.swing-conf[data-conf='medium'] {
+		background: rgba(255, 200, 60, 0.3);
+	}
+	.swing-conf[data-conf='low'] {
+		background: rgba(255, 80, 80, 0.3);
+	}
+	.swing-times {
+		font-size: 1.05rem;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+	}
+	.swing-times .muted {
+		font-weight: 400;
+		opacity: 0.7;
+		margin-left: 6px;
+	}
+	.panel.subtle {
+		padding: 12px 14px;
+		font-size: 0.85rem;
+		margin-bottom: 14px;
 	}
 </style>

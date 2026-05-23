@@ -1,9 +1,9 @@
 <script lang="ts">
 	const phases = [
 		{ id: 0, title: 'Skeleton', status: 'done', detail: 'PWA installable on phone' },
-		{ id: 1, title: 'Camera capture', status: 'in progress', detail: 'Record a swing, play it back' },
-		{ id: 2, title: 'Pose overlay', status: 'todo', detail: 'MediaPipe skeleton on playback' },
-		{ id: 3, title: 'Auto-trim swing', status: 'todo', detail: 'Find the swing window in the clip' },
+		{ id: 1, title: 'Camera capture', status: 'done', detail: 'Record a swing, play it back' },
+		{ id: 2, title: 'Pose overlay', status: 'done', detail: 'MediaPipe skeleton on playback' },
+		{ id: 3, title: 'Auto-trim swing', status: 'in progress', detail: 'Find the swing window in the clip' },
 		{ id: 4, title: 'Fault detection', status: 'todo', detail: 'Early extension / OTT / head movement' },
 		{ id: 5, title: 'History', status: 'todo', detail: 'Save swings to phone, review later' },
 		{ id: 6, title: 'Polish', status: 'todo', detail: 'Install UX, error messages, updates' }

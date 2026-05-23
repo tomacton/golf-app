@@ -57,8 +57,8 @@ Track this manually here when you finish a phase. See `docs/mvp-plan.md` for wha
 
 - [x] **Phase 0** — Skeleton: SvelteKit + PWA manifest + icons + Cloudflare Workers Static Assets deploy. Live at https://golf-app.acton-t.workers.dev.
 - [x] **Phase 1** — Camera capture (/record route + in-memory playback verified on iPhone)
-- [ ] **Phase 2** — Pose overlay (in progress)
-- [ ] **Phase 3** — Auto-trim swing window
+- [x] **Phase 2** — Pose overlay (MediaPipe skeleton on playback + scrubbing, confirmed on iPhone)
+- [ ] **Phase 3** — Auto-trim swing window (in progress)
 - [ ] **Phase 4** — Fault detection (early extension, OTT, head movement)
 - [ ] **Phase 5** — History + persistence (Dexie/IndexedDB)
 - [ ] **Phase 6** — Polish for daily use
