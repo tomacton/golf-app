@@ -6,8 +6,10 @@
 		SwingRecorder,
 		type FacingMode
 	} from '$lib/camera/capture';
+	import { loadPoseLandmarker, drawPose } from '$lib/pose/detector';
 
 	type Phase = 'idle' | 'preview' | 'recording' | 'playback' | 'denied' | 'error';
+	type PoseState = 'idle' | 'loading' | 'ready' | 'failed';
 
 	const MAX_SECONDS = 30;
 
@@ -15,18 +17,78 @@
 	let errorMsg: string = $state('');
 	let facing: FacingMode = $state('environment');
 	let previewEl: HTMLVideoElement | undefined = $state();
+	let playbackEl: HTMLVideoElement | undefined = $state();
+	let canvasEl: HTMLCanvasElement | undefined = $state();
 	let stream: MediaStream | null = null;
 	let recorder: SwingRecorder | null = null;
 	let blob = $state<Blob | null>(null);
 	let blobUrl: string = $state('');
 	let elapsed: number = $state(0);
 	let timer: number | null = null;
+	let poseState: PoseState = $state('idle');
+	let poseError: string = $state('');
 
 	$effect(() => {
 		if (previewEl && stream && (phase === 'preview' || phase === 'recording')) {
 			previewEl.srcObject = stream;
 		}
 	});
+
+	$effect(() => {
+		if (phase !== 'playback' || !playbackEl || !canvasEl) return;
+
+		const video = playbackEl;
+		const canvas = canvasEl;
+		let cancelled = false;
+		poseState = 'loading';
+		poseError = '';
+
+		const detectAndDraw = (timestamp?: number) => {
+			if (cancelled || !video.videoWidth) return;
+			const ts =
+				typeof timestamp === 'number' && timestamp > 0
+					? timestamp
+					: performance.now();
+			const lm = landmarkerRef;
+			if (!lm) return;
+			const result = lm.detectForVideo(video, ts);
+			drawPose(canvas, result.landmarks[0], video.videoWidth, video.videoHeight);
+		};
+
+		const onSeeked = () => detectAndDraw();
+		const frameLoop = () => {
+			if (cancelled) return;
+			detectAndDraw();
+			if (!video.paused && !video.ended) {
+				video.requestVideoFrameCallback(frameLoop);
+			}
+		};
+		const onPlay = () => video.requestVideoFrameCallback(frameLoop);
+
+		(async () => {
+			try {
+				landmarkerRef = await loadPoseLandmarker();
+				if (cancelled) return;
+				poseState = 'ready';
+				video.addEventListener('seeked', onSeeked);
+				video.addEventListener('play', onPlay);
+				// Initial draw for the paused first frame.
+				if (video.readyState >= 2) detectAndDraw();
+				else video.addEventListener('loadeddata', () => detectAndDraw(), { once: true });
+			} catch (err) {
+				poseState = 'failed';
+				poseError = (err as Error).message || 'Could not load pose model.';
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+			video.removeEventListener('seeked', onSeeked);
+			video.removeEventListener('play', onPlay);
+		};
+	});
+
+	let landmarkerRef: Awaited<ReturnType<typeof loadPoseLandmarker>> | null = null;
 
 	async function startPreview() {
 		errorMsg = '';
@@ -131,9 +193,17 @@
 		<p class="hint">Auto-stops at {MAX_SECONDS}s</p>
 	{/if}
 {:else if phase === 'playback'}
-	<div class="video-wrap">
+	<div class="video-wrap playback">
 		<!-- svelte-ignore a11y_media_has_caption -->
-		<video src={blobUrl} controls playsinline></video>
+		<video bind:this={playbackEl} src={blobUrl} controls playsinline></video>
+		<canvas bind:this={canvasEl} class="pose-canvas"></canvas>
+		{#if poseState === 'loading'}
+			<div class="pose-badge">Loading pose model…</div>
+		{:else if poseState === 'failed'}
+			<div class="pose-badge error">Pose load failed: {poseError}</div>
+		{:else if poseState === 'ready'}
+			<div class="pose-badge ok">Pose ready</div>
+		{/if}
 	</div>
 	<dl class="info">
 		<dt>Duration</dt>
@@ -146,7 +216,7 @@
 	<div class="controls">
 		<button class="btn primary" onclick={recordAnother}>Record another</button>
 	</div>
-	<p class="hint">Saved to memory only — Phase 5 will persist swings to your phone.</p>
+	<p class="hint">Play or scrub to see the skeleton track your motion.</p>
 {:else if phase === 'denied'}
 	<div class="panel error">
 		<h2>Camera access denied</h2>
@@ -224,6 +294,38 @@
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
+	}
+	.video-wrap.playback video {
+		object-fit: contain;
+		background: #000;
+	}
+	.pose-canvas {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		pointer-events: none;
+		object-fit: contain;
+	}
+	.pose-badge {
+		position: absolute;
+		top: 12px;
+		right: 12px;
+		padding: 6px 10px;
+		border-radius: 999px;
+		background: rgba(0, 0, 0, 0.55);
+		color: #fff;
+		font-size: 0.75rem;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+	}
+	.pose-badge.ok {
+		background: rgba(0, 150, 80, 0.7);
+	}
+	.pose-badge.error {
+		background: rgba(200, 50, 50, 0.85);
+		max-width: 70%;
+		word-break: break-word;
 	}
 	.rec-badge {
 		position: absolute;

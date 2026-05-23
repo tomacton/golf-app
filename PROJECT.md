@@ -48,4 +48,5 @@ The user is a **non-coder**: drive the work, pick sensible defaults, explain dec
 | 2026-05-22 | Project kickoff. Research phase complete. MVP plan locked in.          |
 | 2026-05-22 | v1 scope: swing video analysis (record → auto-trim → pose overlay → 3 faults → save). See `docs/mvp-plan.md`. |
 | 2026-05-22 | Phase 0 complete. Deployed to https://golf-app.acton-t.workers.dev, installed to iPhone home screen. |
-| 2026-05-23 | Phase 1 — Camera capture: in progress.                                 |
+| 2026-05-23 | Phase 1 complete — /record route, in-memory playback working on phone. |
+| 2026-05-23 | Phase 2 — Pose overlay: in progress.                                   |
