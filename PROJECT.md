@@ -50,4 +50,5 @@ The user is a **non-coder**: drive the work, pick sensible defaults, explain dec
 | 2026-05-22 | Phase 0 complete. Deployed to https://golf-app.acton-t.workers.dev, installed to iPhone home screen. |
 | 2026-05-23 | Phase 1 complete — /record route, in-memory playback working on phone. |
 | 2026-05-23 | Phase 2 complete — MediaPipe skeleton tracks playback, confirmed on phone. |
-| 2026-05-23 | Phase 3 — Auto-trim swing window: in progress.                         |
+| 2026-05-23 | Phase 3 complete — Auto-trim swing window with confidence bucket, confirmed on phone. |
+| 2026-05-23 | Phase 4 — Fault detection: starting with head movement end-to-end.     |

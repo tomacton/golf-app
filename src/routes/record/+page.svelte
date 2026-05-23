@@ -8,6 +8,7 @@
 	} from '$lib/camera/capture';
 	import { loadPoseLandmarker, drawPose } from '$lib/pose/detector';
 	import { findSwingWindow, type PoseFrame, type SwingWindow } from '$lib/pose/swing';
+	import { detectFaults, type FaultResults } from '$lib/pose/faults';
 
 	type Phase = 'idle' | 'preview' | 'recording' | 'analyzing' | 'playback' | 'denied' | 'error';
 	type PoseState = 'idle' | 'loading' | 'ready' | 'failed';
@@ -31,6 +32,7 @@
 	let analysisProgress: number = $state(0);
 	let analysisError: string = $state('');
 	let swingWindow = $state<SwingWindow | null>(null);
+	let faults = $state<FaultResults | null>(null);
 
 	$effect(() => {
 		if (previewEl && stream && (phase === 'preview' || phase === 'recording')) {
@@ -162,10 +164,13 @@
 		analysisProgress = 0;
 		analysisError = '';
 		swingWindow = null;
+		faults = null;
 		try {
-			swingWindow = await analyzeSwing(blob, (pct) => {
+			const result = await analyzeSwing(blob, (pct) => {
 				analysisProgress = pct;
 			});
+			swingWindow = result.window;
+			faults = result.faults;
 		} catch (err) {
 			analysisError = (err as Error).message || 'Swing analysis failed.';
 		}
@@ -175,7 +180,7 @@
 	async function analyzeSwing(
 		clip: Blob,
 		onProgress: (pct: number) => void
-	): Promise<SwingWindow | null> {
+	): Promise<{ window: SwingWindow | null; faults: FaultResults | null }> {
 		const video = document.createElement('video');
 		const url = URL.createObjectURL(clip);
 		video.src = url;
@@ -231,7 +236,9 @@
 			});
 
 			onProgress(100);
-			return findSwingWindow(frames);
+			const window = findSwingWindow(frames);
+			const fr = window ? detectFaults(frames, window) : null;
+			return { window, faults: fr };
 		} finally {
 			document.body.removeChild(video);
 			URL.revokeObjectURL(url);
@@ -250,6 +257,7 @@
 		blob = null;
 		elapsed = 0;
 		swingWindow = null;
+		faults = null;
 		analysisProgress = 0;
 		await startPreview();
 	}
@@ -338,6 +346,20 @@
 				<span class="muted">({swingDuration}s)</span>
 			</div>
 		</div>
+		{#if faults?.headMovement}
+			<div class="fault-card" data-verdict={faults.headMovement.verdict}>
+				<div class="fault-row">
+					<span class="fault-name">Head movement</span>
+					<span class="fault-verdict" data-verdict={faults.headMovement.verdict}>
+						{faults.headMovement.verdict}
+					</span>
+				</div>
+				<p class="fault-explain">{faults.headMovement.explanation}</p>
+				<p class="fault-metric">
+					Lateral travel: {(faults.headMovement.ratio * 100).toFixed(0)}% of shoulder width
+				</p>
+			</div>
+		{/if}
 	{:else if analysisError}
 		<div class="panel error subtle">
 			<strong>Swing analysis failed:</strong> {analysisError}
@@ -638,5 +660,66 @@
 		padding: 12px 14px;
 		font-size: 0.85rem;
 		margin-bottom: 14px;
+	}
+
+	.fault-card {
+		padding: 12px 14px;
+		border-radius: 10px;
+		margin-bottom: 14px;
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		background: rgba(255, 255, 255, 0.06);
+	}
+	.fault-card[data-verdict='ok'] {
+		background: rgba(0, 200, 120, 0.14);
+		border-color: rgba(0, 200, 120, 0.4);
+	}
+	.fault-card[data-verdict='moderate'] {
+		background: rgba(255, 180, 50, 0.14);
+		border-color: rgba(255, 180, 50, 0.45);
+	}
+	.fault-card[data-verdict='large'] {
+		background: rgba(220, 60, 60, 0.16);
+		border-color: rgba(255, 110, 110, 0.5);
+	}
+	.fault-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		margin-bottom: 6px;
+	}
+	.fault-name {
+		font-size: 0.95rem;
+		font-weight: 600;
+	}
+	.fault-verdict {
+		font-size: 0.75rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		font-weight: 700;
+		padding: 3px 9px;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.18);
+	}
+	.fault-verdict[data-verdict='ok'] {
+		background: rgba(0, 230, 118, 0.4);
+	}
+	.fault-verdict[data-verdict='moderate'] {
+		background: rgba(255, 200, 60, 0.4);
+	}
+	.fault-verdict[data-verdict='large'] {
+		background: rgba(255, 100, 100, 0.45);
+	}
+	.fault-explain {
+		margin: 0 0 4px;
+		font-size: 0.9rem;
+		line-height: 1.4;
+		opacity: 0.92;
+	}
+	.fault-metric {
+		margin: 0;
+		font-size: 0.78rem;
+		opacity: 0.65;
+		font-variant-numeric: tabular-nums;
 	}
 </style>
