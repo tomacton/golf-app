@@ -52,3 +52,6 @@ The user is a **non-coder**: drive the work, pick sensible defaults, explain dec
 | 2026-05-23 | Phase 2 complete — MediaPipe skeleton tracks playback, confirmed on phone. |
 | 2026-05-23 | Phase 3 complete — Auto-trim swing window with confidence bucket, confirmed on phone. |
 | 2026-05-23 | Phase 4 — Fault detection: starting with head movement end-to-end.     |
+| 2026-05-24 | Phase 4 head-movement detector landed + deployed (`c20dcf3b`).         |
+| 2026-05-24 | Phase 3 trim found cutting real swings too early on phone — needs threshold tuning. Phase 4 card hides when trim is too tight (insufficient frames). See "Where we left off" in `CLAUDE.md`. |
+| 2026-05-24 | Cloudflare deploy now via `CLOUDFLARE_API_TOKEN` in `~/.bashrc` (OAuth `wrangler login` won't work from Claude's shell). |
